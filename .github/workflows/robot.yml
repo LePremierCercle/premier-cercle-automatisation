@@ -1,0 +1,63 @@
+name: Robot Premier Cercle
+
+on:
+  repository_dispatch:
+    types: [nouveau-contenu]
+  schedule:
+    - cron: '5 5-21 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: robot
+  cancel-in-progress: false
+
+jobs:
+  traiter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Installer ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Installer les bibliotheques
+        run: pip install -q -r requirements.txt
+
+      - name: Mettre en cache les ressources
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.fonts
+            ~/.cache/huggingface
+          key: ressources-v1
+
+      - name: Installer les polices
+        run: python -m robot.polices
+
+      - name: Faire le travail
+        env:
+          PASSERELLE_URL: ${{ secrets.PASSERELLE_URL }}
+          PASSERELLE_JETON: ${{ secrets.PASSERELLE_JETON }}
+        run: python -m robot.principal
+
+      - name: Conserver les traces en cas de probleme
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces
+          path: |
+            travail/*.log
+            travail/*.jpg
+          retention-days: 7
+          if-no-files-found: ignore
