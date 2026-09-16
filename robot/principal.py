@@ -68,7 +68,15 @@ def lire_accroche(chemin):
 # --------------------------------------------------------------- étapes
 
 def etape_transcription(element, fichier, dossier):
-    """Transcrit et range le texte. C'est lui qui nourrit la tâche Claude."""
+    """
+    Transcrit la parole.
+
+    Le texte n'est PAS déposé ici : il l'est tout à la fin du passage, une
+    fois les sous-titres incrustés. C'est lui qui sert de preuve que la
+    vidéo est terminée — le déposer trop tôt ferait croire au robot qu'une
+    vidéo interrompue en cours de route est finie, et il ne la reprendrait
+    jamais (c'est ce qui est arrivé le 15/09/2026).
+    """
     from . import transcription as T
 
     dire("  transcription…")
@@ -76,10 +84,13 @@ def etape_transcription(element, fichier, dossier):
     resultat = T.transcrire(fichier)
     dire("  transcrit en %d s, %d mots"
          % (round(time.time() - debut), len(resultat["mots"])))
+    return resultat
 
+
+def ranger_la_transcription(element, resultat):
+    """Dépose le texte : le passage est terminé, la tâche Claude peut écrire."""
     P.deposer_texte(element["base"] + ".transcription.txt",
                     resultat["texte"], "A_POSTER")
-    return resultat
 
 
 def etape_miniature(element, fichier, dossier, accroche):
@@ -198,7 +209,18 @@ def traiter(element):
                 dire("  couverture en attente du texte de la tâche Claude")
 
         if besoin_soustitres:
-            etape_soustitres(element, propre, dossier, resultat["mots"])
+            try:
+                etape_soustitres(element, propre, dossier, resultat["mots"])
+            except Exception as e:
+                # On n'insiste pas : sans cela le robot reprendrait la même
+                # vidéo à chaque réveil. On prévient, et on considère le
+                # passage terminé.
+                dire("  sous-titres impossibles : %s" % e)
+                traceback.print_exc()
+                P.signaler("Sous-titres impossibles : " + element["nom"],
+                           "La vidéo est restée sans sous-titres incrustés.\n\n"
+                           "%s\n\n%s" % (e, traceback.format_exc()[:1200]))
+            ranger_la_transcription(element, resultat)
 
     except Exception as e:
         dire("  ÉCHEC : %s" % e)
