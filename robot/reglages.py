@@ -52,6 +52,27 @@ AMBRE  = (0xEA, 0x9E, 0x68)
 # Retouche validée par Bilel
 LUMINOSITE, CONTRASTE, SATURATION, NETTETE = 1.06, 1.14, 1.08, 35
 
+# ---------------------------------------------------------- Couverture "Le Premier Cercle"
+# Charte validée le 15/09/2026 ("c'est parfait, on valide cette configuration"),
+# référence visuelle : compte @fable5. Remplace l'ancienne mise en page
+# alignée à gauche : ici tout est centré, deux lignes seulement, puis la
+# signature de la marque.
+COUVERTURE_IVOIRE = (0xF2, 0xEF, 0xE9)
+COUVERTURE_TITRE_TAILLE = 104        # ligne blanc ivoire, Inter Bold
+COUVERTURE_ACCENT_TAILLE = 122       # ligne entière en Lora Italic, dégradé
+COUVERTURE_TITRE_HAUT = 1058         # sommet de la première ligne (validé 15/09/2026)
+COUVERTURE_SERRAGE = 0.86            # écart entre les sommets des 2 lignes = 0.86 x taille de la ligne blanche
+COUVERTURE_ASSOMBRISSEMENT = 0.28    # voile sombre global (24 à 32 %), accepté pour ce style précis seulement
+COUVERTURE_MARGE_SECURITE = 100      # aucune lettre à moins de 100 px des bords (grille Instagram en 3:4)
+COUVERTURE_BAS_MAX = 1650            # tout le bloc, signature comprise, doit finir avant l'interface Instagram
+
+# signature "LE PREMIER CERCLE" sous les deux lignes
+COUVERTURE_SIGNATURE_TAILLE = 38
+COUVERTURE_SIGNATURE_ECART = 26      # espace entre le logo et le texte de la signature
+COUVERTURE_LOGO_TAILLE = 56
+COUVERTURE_LOGO_ROSE = (0xE3, 0x9B, 0x9E)
+COUVERTURE_LOGO_OR   = (0xD9, 0xB9, 0x6E)
+
 # ---------------------------------------------------------------- Story
 STORY_Y = 1560           # la phrase est posée là, sous ses propres sous-titres
 STORY_TAILLE = 60
