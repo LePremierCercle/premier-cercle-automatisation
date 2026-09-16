@@ -224,39 +224,3 @@ def traiter(element):
             except Exception as e:
                 dire("  sous-titres impossibles : %s" % e)
                 traceback.print_exc()
-                P.signaler("Sous-titres impossibles : " + element["nom"],
-                           "La vidéo est restée sans sous-titres incrustés.\n\n"
-                           "%s\n\n%s" % (e, traceback.format_exc()[:1200]))
-            ranger_la_transcription(element, resultat)
-
-    except Exception as e:
-        dire("  ÉCHEC : %s" % e)
-        traceback.print_exc()
-        P.signaler("Le robot a buté sur " + element.get("nom", "une vidéo"),
-                   "%s\n\n%s" % (e, traceback.format_exc()[:1500]))
-    finally:
-        shutil.rmtree(dossier, ignore_errors=True)
-
-
-def main():
-    os.makedirs(TRAVAIL, exist_ok=True)
-    debut = time.time()
-
-    elements = P.travail()
-    if not elements:
-        dire("Rien à faire.")
-        return 0
-
-    dire("%d vidéo(s) en attente." % len(elements))
-    for element in elements:
-        if time.time() - debut > 35 * 60:
-            dire("Temps de passage épuisé, la suite au prochain réveil.")
-            break
-        traiter(element)
-
-    dire("\nTerminé en %s min." % round((time.time() - debut) / 60, 1))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
