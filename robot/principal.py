@@ -39,6 +39,11 @@ def lire_accroche(chemin):
     comme une seule phrase coupée en deux.
       ligne 1  posée en Inter Bold, blanc ivoire
       ligne 2  posée entièrement en Lora Italic, en dégradé corail vers ambre
+
+    Les lignes suivantes, s'il y en a (ancien format à cinq lignes), sont
+    ignorées. Les astérisques de l'ancien format sont retirées : dans ce
+    modèle, c'est toute la deuxième ligne qui est en couleur, et plus un
+    seul mot au milieu d'une phrase.
     """
     with open(chemin, encoding="utf-8") as f:
         lignes = []
@@ -61,10 +66,11 @@ def etape_transcription(element, fichier, dossier):
     """
     Transcrit la parole.
 
-    Le texte n'est PAS déposé ici : il l'est à la fin du passage, une fois
-    les sous-titres incrustés. C'est lui qui sert de preuve que la vidéo est
-    terminée — le déposer trop tôt ferait croire au robot qu'une vidéo
-    interrompue en cours de route est finie, et il ne la reprendrait jamais.
+    Le texte n'est PAS déposé ici : il l'est tout à la fin du passage, une
+    fois les sous-titres incrustés. C'est lui qui sert de preuve que la
+    vidéo est terminée — le déposer trop tôt ferait croire au robot qu'une
+    vidéo interrompue en cours de route est finie, et il ne la reprendrait
+    jamais (c'est ce qui est arrivé le 15/09/2026).
     """
     from . import transcription as T
 
@@ -196,6 +202,8 @@ def traiter(element):
              % (infos["largeur"], infos["hauteur"],
                 round(infos["duree"]), infos["rotation"]))
 
+        # La normalisation redresse l'image : sans elle, tout ce qu'on écrirait
+        # dessus partirait de travers.
         propre = os.path.join(dossier, "propre.mp4")
         dire("  normalisation…")
         V.normaliser(brut, propre)
@@ -222,5 +230,44 @@ def traiter(element):
             try:
                 etape_soustitres(element, propre, dossier, resultat["mots"])
             except Exception as e:
+                # On n'insiste pas : sans cela le robot reprendrait la même
+                # vidéo à chaque réveil. On prévient, et on considère le
+                # passage terminé.
                 dire("  sous-titres impossibles : %s" % e)
                 traceback.print_exc()
+                P.signaler("Sous-titres impossibles : " + element["nom"],
+                           "La vidéo est restée sans sous-titres incrustés.\n\n"
+                           "%s\n\n%s" % (e, traceback.format_exc()[:1200]))
+            ranger_la_transcription(element, resultat)
+
+    except Exception as e:
+        dire("  ÉCHEC : %s" % e)
+        traceback.print_exc()
+        P.signaler("Le robot a buté sur " + element.get("nom", "une vidéo"),
+                   "%s\n\n%s" % (e, traceback.format_exc()[:1500]))
+    finally:
+        shutil.rmtree(dossier, ignore_errors=True)
+
+
+def main():
+    os.makedirs(TRAVAIL, exist_ok=True)
+    debut = time.time()
+
+    elements = P.travail()
+    if not elements:
+        dire("Rien à faire.")
+        return 0
+
+    dire("%d vidéo(s) en attente." % len(elements))
+    for element in elements:
+        if time.time() - debut > 35 * 60:
+            dire("Temps de passage épuisé, la suite au prochain réveil.")
+            break
+        traiter(element)
+
+    dire("\nTerminé en %s min." % round((time.time() - debut) / 60, 1))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
