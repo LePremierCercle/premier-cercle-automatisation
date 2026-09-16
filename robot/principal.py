@@ -120,6 +120,28 @@ def etape_miniature(element, fichier, dossier, accroche):
         return None
 
 
+def etape_mettre_de_cote(element, fichier, dossier):
+    """
+    Met de côté une image propre de la vidéo, avant l'incrustation.
+
+    Sans cela, la couverture fabriquée au passage suivant serait bâtie sur
+    une image portant déjà les sous-titres : ils se superposeraient au texte
+    de la couverture.
+    """
+    if element.get("photo"):
+        return None
+    try:
+        fond = os.path.join(dossier, "fond.jpg")
+        if not V.meilleure_image(fichier, fond):
+            return None
+        P.deposer_image(element["base"] + ".jpg", fond, "A_POSTER")
+        dire("  image propre mise de côté pour la couverture")
+        return fond
+    except Exception as e:
+        dire("  image de couverture impossible à mettre de côté : %s" % e)
+        return None
+
+
 def etape_soustitres(element, fichier, dossier, mots):
     """Incruste les sous-titres et renvoie la vidéo à sa place."""
     if not mots:
@@ -146,6 +168,8 @@ def traiter(element):
         taille_mo = element["taille"] / 1048576
         dire("\n%s  [%d Mo]" % (element["nom"], round(taille_mo)))
 
+        # Garde-fous : sans eux, une vidéo déjà traitée repartait à chaque
+        # réveil et le robot tournait en boucle.
         deja_transcrit = element["deja"]["transcription"]
         besoin_soustitres = R.SOUSTITRES_ACTIFS and not deja_transcrit
         besoin_miniature = not element["deja"]["miniature"]
@@ -192,6 +216,7 @@ def traiter(element):
                 etape_miniature(element, propre, dossier, accroche)
             else:
                 dire("  couverture en attente du texte de la tâche Claude")
+                etape_mettre_de_cote(element, propre, dossier)
 
         if besoin_soustitres:
             try:
