@@ -29,26 +29,34 @@ def _appel(action, charge=None, fichiers=None):
     if charge:
         corps.update(charge)
 
-    # Google redirige parfois la réponse et le robot reçoit une page au lieu
-    # du message attendu. On réessaie plutôt que d'abandonner le travail déjà
-    # fait, et on dit clairement ce qui a été reçu si ça ne passe toujours pas.
-    debut_recu = ""
-    for essai in range(3):
-        r = requests.post(PASSERELLE, json=corps, timeout=DELAI)
-        r.raise_for_status()
+    # Google égare parfois la réponse d'Apps Script : l'adresse de retour
+    # renvoie un 404, ou une page au lieu du message attendu. Le travail, lui,
+    # a bien été fait. On réessaie donc plutôt que d'abandonner : toutes nos
+    # actions supportent d'être refaites (un dépôt remplace l'homonyme, une
+    # session d'envoi inutilisée expire toute seule).
+    probleme = ""
+    for essai in range(4):
         try:
+            r = requests.post(PASSERELLE, json=corps, timeout=DELAI)
+            r.raise_for_status()
             reponse = r.json()
+        except requests.HTTPError as err:
+            code = err.response.status_code if err.response is not None else "?"
+            probleme = "Google a répondu %s" % code
         except ValueError:
-            debut_recu = r.text[:400].replace("\n", " ")
-            time.sleep(3 * (essai + 1))
-            continue
-        if not reponse.get("ok", False):
-            raise RuntimeError("La passerelle a répondu : " + str(reponse.get("erreur")))
-        return reponse
+            probleme = "réponse illisible : " + r.text[:200].replace("\n", " ")
+        except requests.RequestException as err:
+            probleme = str(err)[:200]
+        else:
+            if not reponse.get("ok", False):
+                raise RuntimeError("La passerelle a répondu : " + str(reponse.get("erreur")))
+            return reponse
+
+        time.sleep(3 * (essai + 1))
 
     raise RuntimeError(
-        "La passerelle n'a pas répondu correctement pour l'action « %s ». "
-        "Début de ce qu'elle a envoyé : %s" % (action, debut_recu)
+        "La passerelle n'a pas répondu pour l'action « %s » après 4 essais. "
+        "Dernier problème : %s" % (action, probleme)
     )
 
 
@@ -106,7 +114,9 @@ def deposer_video(nom, chemin, dossier):
         "dossier": dossier,
         "taille": taille,
     })
-    url = session["url"]
+    url = session.get("url")
+    if not url:
+        raise RuntimeError("La passerelle n'a pas renvoyé d'adresse d'envoi.")
 
     envoye = 0
     bloc = 8 * 1024 * 1024          # 8 Mo par morceau
