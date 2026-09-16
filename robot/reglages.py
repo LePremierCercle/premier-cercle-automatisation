@@ -102,7 +102,7 @@ LEGENDE_PAR_DEFAUT = (
 # ---------------------------------------------------------------- Sous-titres
 SOUSTITRES_ACTIFS = True       # mettre à False pour publier sans sous-titres
 SOUSTITRES_MODELE = "small"    # le bon compromis en français
-SOUSTITRES_Y = 1330            # ligne de base, sous le menton (validé 15/09/2026)
+SOUSTITRES_Y = 1420            # ligne de base ; descendu le 16/09/2026, ils étaient trop hauts
 SOUSTITRES_TAILLE = 66         # mots ordinaires, en Inter Bold
 SOUSTITRES_RATIO_FORT = 1.42   # le mot en couleur est 42 % plus gros (validé 15/09/2026)
 SOUSTITRES_MARGE = 170         # air laissé de chaque côté
