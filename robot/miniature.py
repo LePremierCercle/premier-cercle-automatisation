@@ -1,22 +1,29 @@
 # -*- coding: utf-8 -*-
 """
-Fabrication de la miniature (couverture de réel).
+Fabrication de la couverture de réel « Le Premier Cercle ».
 
 Entrée  : une image de n'importe quel format (capture d'écran de téléphone,
-          arrêt sur image, photo) + un texte en trois parties.
+          arrêt sur image, photo) + deux lignes de texte.
 Sortie  : un JPEG 1080 x 1920, à la charte de Bilel.
 
-Règles non négociables, issues de ses retours :
+MODÈLE VALIDÉ LE 15/09/2026, référence visuelle : le compte @fable5.
+Il est écrit en dur ici, il ne doit plus changer sans l'accord de Bilel :
   - format 1080 x 1920 exactement, sinon Instagram ignore la couverture ;
-  - marge gauche 95 px minimum, le bloc de texte s'arrête à 1250 px ;
-  - AUCUN fond noir, AUCUN voile sombre, AUCUN dégradé assombri :
-    la photo reste pleine et intacte, seul un halo doux autour des lettres
-    assure la lisibilité ;
-  - mots forts en dégradé corail vers ambre, jamais en aplat uni ;
-  - police Inter, jamais de substitut.
+  - tout le texte est CENTRÉ, en partie basse, en deux lignes seulement :
+      ligne 1  Inter Bold, blanc ivoire
+      ligne 2  Lora Italic, ENTIÈREMENT en dégradé corail vers ambre
+    les deux lignes se lisent comme une seule phrase coupée en deux ;
+  - sous les deux lignes, la signature : le logo du Premier Cercle dessiné
+    en code, puis « LE PREMIER CERCLE » ;
+  - AUCUNE pastille, AUCUNE étiquette en haut de l'image ;
+  - le dégradé est calé sur la largeur DE LA LIGNE, jamais sur celle de
+    l'image, sinon la transition ne se voit pas ;
+  - aucune lettre à moins de 100 px des bords : la grille Instagram rogne
+    34 px de chaque côté ;
+  - léger voile sombre global, accepté POUR CE STYLE uniquement, plus un
+    halo doux autour des lettres.
 """
 
-import math
 import os
 
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
@@ -42,6 +49,14 @@ def _police(graisse: str, taille: int) -> ImageFont.FreeTypeFont:
     raise FileNotFoundError(
         "Police Inter introuvable. Le robot doit l'installer avant de fabriquer une miniature."
     )
+
+
+def _serif_italique(taille: int) -> ImageFont.FreeTypeFont:
+    """
+    La deuxième ligne de la couverture est en Lora Italic, jamais en Inter :
+    c'est ce qui la distingue de la première (modèle validé).
+    """
+    return ImageFont.truetype(R.POLICE_SERIF_ITALIQUE, taille)
 
 
 # ----------------------------------------------------------------- préparation du fond
@@ -128,13 +143,86 @@ def _retoucher(im: Image.Image) -> Image.Image:
 
 # ----------------------------------------------------------------- dégradé
 
-def _degrade() -> Image.Image:
-    bande = Image.new("RGB", (R.LARGEUR, 1))
+def _bande(largeur: int) -> Image.Image:
+    largeur = max(2, largeur)
+    bande = Image.new("RGB", (largeur, 1))
     d = ImageDraw.Draw(bande)
-    for x in range(R.LARGEUR):
-        k = x / (R.LARGEUR - 1)
+    for x in range(largeur):
+        k = x / (largeur - 1)
         d.point((x, 0), tuple(int(R.CORAIL[i] + (R.AMBRE[i] - R.CORAIL[i]) * k) for i in range(3)))
-    return bande.resize((R.LARGEUR, R.HAUTEUR))
+    return bande.resize((largeur, 1))
+
+
+def _degrade_sur_le_mot(masque_fort: Image.Image) -> Image.Image:
+    """
+    Le dégradé est calé sur la boîte du texte en couleur, pas sur la largeur
+    de l'image : sinon, selon l'endroit où tombe le texte, on ne voit jamais
+    qu'un bout du dégradé (parfois presque uni).
+    """
+    plein = Image.new("RGB", (R.LARGEUR, R.HAUTEUR), R.CORAIL)
+    boite = masque_fort.getbbox()
+    if boite:
+        gauche, haut, droite, bas = boite
+        bande = _bande(droite - gauche).resize((droite - gauche, bas - haut))
+        plein.paste(bande, (gauche, haut))
+    return plein
+
+
+# ------------------------------------------------------------- signature de marque
+
+def _logo(taille: int) -> Image.Image:
+    """
+    Le symbole « Le Premier Cercle » : un anneau de six arcs (un cercle
+    brisé) et un petit anneau central, en dégradé rose vers or. Dessiné en
+    code, jamais chargé depuis un fichier, pour rester net à toute taille.
+    """
+    echelle = 4
+    grand = taille * echelle
+    masque = Image.new("L", (grand, grand), 0)
+    d = ImageDraw.Draw(masque)
+
+    epaisseur = max(2, grand // 14)
+    boite_ext = (epaisseur, epaisseur, grand - epaisseur, grand - epaisseur)
+    ecart_deg, pas = 18, 360 / 6
+    for i in range(6):
+        d.arc(boite_ext, i * pas + ecart_deg / 2, (i + 1) * pas - ecart_deg / 2,
+              fill=255, width=epaisseur)
+
+    r = grand * 0.24
+    cx = cy = grand / 2
+    d.ellipse((cx - r, cy - r, cx + r, cy + r), outline=255, width=max(2, epaisseur // 2))
+
+    degrade = Image.new("RGB", (grand, grand), R.COUVERTURE_LOGO_ROSE)
+    dg = ImageDraw.Draw(degrade)
+    for x in range(grand):
+        k = x / (grand - 1)
+        c = tuple(int(R.COUVERTURE_LOGO_ROSE[i]
+                      + (R.COUVERTURE_LOGO_OR[i] - R.COUVERTURE_LOGO_ROSE[i]) * k) for i in range(3))
+        dg.line([(x, 0), (x, grand)], fill=c)
+
+    logo = Image.new("RGBA", (grand, grand), (0, 0, 0, 0))
+    logo.paste(degrade, (0, 0), masque)
+    return logo.resize((taille, taille), Image.LANCZOS)
+
+
+def _signature(largeur_page: int) -> Image.Image:
+    """Le logo suivi de « LE PREMIER CERCLE », centrés comme un seul bloc."""
+    f_sig = _police("Bold", R.COUVERTURE_SIGNATURE_TAILLE)
+    texte = "LE PREMIER CERCLE"
+    mesureur = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    boite_texte = mesureur.textbbox((0, 0), texte, font=f_sig)
+    largeur_texte = boite_texte[2] - boite_texte[0]
+
+    logo = _logo(R.COUVERTURE_LOGO_TAILLE)
+    largeur_totale = logo.width + R.COUVERTURE_SIGNATURE_ECART + largeur_texte
+    x0 = int((largeur_page - largeur_totale) / 2)
+
+    calque = Image.new("RGBA", (largeur_page, logo.height), (0, 0, 0, 0))
+    calque.paste(logo, (x0, 0), logo)
+    d = ImageDraw.Draw(calque)
+    d.text((x0 + logo.width + R.COUVERTURE_SIGNATURE_ECART, logo.height / 2),
+           texte, font=f_sig, fill=R.COUVERTURE_IVOIRE + (255,), anchor="lm")
+    return calque
 
 
 # ----------------------------------------------------------------- fabrication
@@ -142,143 +230,88 @@ def _degrade() -> Image.Image:
 def fabriquer(chemin_source: str, titre, ligne, chute, sortie: str,
               trait_stylo: bool = True) -> str:
     """
-    titre : liste de 1 à 2 lignes, en gras
-    ligne : liste de morceaux (texte, "blanc" ou "fort")
-    chute : liste de 1 à 2 lignes, détachées
+    Couverture « Le Premier Cercle », modèle validé le 15/09/2026 :
+    tout est centré horizontalement, en deux lignes seulement — une ligne
+    blanc ivoire, puis une ligne ENTIÈRE en Lora Italic dégradée — suivies
+    de la signature de la marque. Plus de bloc aligné à gauche, plus de
+    pastille en haut.
+
+    titre : liste de lignes ; seule la première est gardée, en blanc ivoire
+    ligne : liste de morceaux (texte, style) — recomposée en une seule
+            phrase, posée entièrement en italique dégradée
+    chute : ignorée dans ce modèle, remplacée par la signature de marque
     """
     im = Image.open(chemin_source).convert("RGB")
     im = _rogner_bandes_noires(im)
     im = _recadrer(im)
     im = _retoucher(im)
 
-    f_titre = _police("Bold", R.TAILLE_TITRE)
-    f_reg = _police("Regular", R.TAILLE_TEXTE)
-    f_gras = _police("Bold", R.TAILLE_FORT)
+    ligne_titre = (titre[0] if titre else "").strip()
+    ligne_accent = "".join(t for t, _ in ligne).strip()
+
+    f_titre = _police("Bold", R.COUVERTURE_TITRE_TAILLE)
+    f_accent = _serif_italique(R.COUVERTURE_ACCENT_TAILLE)
 
     mesureur = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    largeur_dispo = R.LARGEUR - 2 * R.COUVERTURE_MARGE_SECURITE
 
-    def mesure(t, f):
+    def largeur_texte(t, f):
         b = mesureur.textbbox((0, 0), t, font=f)
-        return b, b[2] - b[0], b[3] - b[1]
+        return b[2] - b[0]
 
-    largeur_dispo = R.LARGEUR - 2 * R.MARGE_GAUCHE
-
-    # on réduit le texte plutôt que de laisser déborder
-    while True:
-        trop_large = any(mesure(t, f_titre)[1] > largeur_dispo for t in titre)
-        trop_large = trop_large or sum(mesure(t, f_gras if s == "fort" else f_reg)[1]
-                                       for t, s in ligne) > largeur_dispo
-        trop_large = trop_large or any(mesure(t, f_reg)[1] > largeur_dispo for t in chute)
-        if not trop_large or f_titre.size <= 56:
-            break
+    while (largeur_texte(ligne_titre, f_titre) > largeur_dispo
+           or largeur_texte(ligne_accent, f_accent) > largeur_dispo) and f_titre.size > 56:
         f_titre = _police("Bold", f_titre.size - 2)
-        f_reg = _police("Regular", max(40, f_reg.size - 2))
-        f_gras = _police("Bold", max(46, f_gras.size - 2))
-
-    # Tout est posé sur des lignes de base régulières : l'écart entre deux lignes
-    # ne dépend plus des lettres écrites, il est constant et réglable.
-    def pas(f):
-        m, d = f.getmetrics()
-        return int((m + d) * R.INTERLIGNE)
-
-    montee = max(f_reg.getmetrics()[0], f_gras.getmetrics()[0])
-    descente = max(f_reg.getmetrics()[1], f_gras.getmetrics()[1])
-
-    pas_titre = pas(f_titre)
-    pas_chute = pas(f_reg)
-    h_ligne = montee + descente
-    ESP_BLOC, SOUS = R.ESPACE_ENTRE_BLOCS, 24
-
-    # hauteur exacte : on compte la descente de la toute dernière ligne
-    montee_chute, descente_chute = f_reg.getmetrics()
-    bloc = (pas_titre * len(titre)
-            + ESP_BLOC + h_ligne + SOUS
-            + ESP_BLOC + montee_chute + pas_chute * (len(chute) - 1) + descente_chute)
-    y = R.BAS_DU_TEXTE - bloc
+        f_accent = _serif_italique(max(56, f_accent.size - 2))
 
     masque_blanc = Image.new("L", (R.LARGEUR, R.HAUTEUR), 0)
     masque_fort = Image.new("L", (R.LARGEUR, R.HAUTEUR), 0)
     d_blanc = ImageDraw.Draw(masque_blanc)
     d_fort = ImageDraw.Draw(masque_fort)
 
-    base = y + f_titre.getmetrics()[0]
-    for t in titre:
-        d_blanc.text((R.MARGE_GAUCHE, base), t, font=f_titre, fill=255, anchor="ls")
-        base += pas_titre
-    y = base - f_titre.getmetrics()[0] + ESP_BLOC
+    y_titre = R.COUVERTURE_TITRE_HAUT
+    x_titre = (R.LARGEUR - largeur_texte(ligne_titre, f_titre)) / 2
+    d_blanc.text((x_titre, y_titre), ligne_titre, font=f_titre, fill=255, anchor="la")
 
-    # les deux tailles de la ligne partagent la même ligne de base
-    x = R.MARGE_GAUCHE
-    base_commune = y + montee
-    x_fort = None
-    for t, style in ligne:
-        f = f_gras if style == "fort" else f_reg
-        larg = mesureur.textlength(t, font=f)
-        cible = d_fort if style == "fort" else d_blanc
-        cible.text((x, base_commune), t, font=f, fill=255, anchor="ls")
-        if style == "fort" and x_fort is None:
-            x_fort = (x, x + larg)
-        x += larg
-    y += h_ligne + SOUS
+    ecart = int(R.COUVERTURE_TITRE_TAILLE * R.COUVERTURE_SERRAGE)
+    y_accent = y_titre + ecart
+    x_accent = (R.LARGEUR - largeur_texte(ligne_accent, f_accent)) / 2
+    d_fort.text((x_accent, y_accent), ligne_accent, font=f_accent, fill=255, anchor="la")
 
-    if x_fort:
-        trait = Image.new("L", (R.LARGEUR, R.HAUTEUR), 0)
-        dt = ImageDraw.Draw(trait)
-        y_trait = base_commune + 16
-        x0, x1 = x_fort
-        if trait_stylo:
-            pts = []
-            n = 60
-            for i in range(n + 1):
-                k = i / n
-                pts.append((x0 + (x1 - x0) * k,
-                            y_trait - math.sin(k * math.pi) * 3,
-                            2 + 5 * math.sin(k * math.pi)))
-            for i in range(n):
-                ep = int((pts[i][2] + pts[i + 1][2]) / 2)
-                dt.line([pts[i][:2], pts[i + 1][:2]], fill=255, width=max(2, ep))
-        else:
-            dt.line([(x0, y_trait), (x1, y_trait)], fill=255, width=6)
-        masque_fort.paste(255, (0, 0), trait)
+    boite_accent = mesureur.textbbox((x_accent, y_accent), ligne_accent, font=f_accent, anchor="la")
+    y_signature = boite_accent[3] + 46
 
-    y += ESP_BLOC
-    base = y + f_reg.getmetrics()[0]
-    for t in chute:
-        d_blanc.text((R.MARGE_GAUCHE, base), t, font=f_reg, fill=255, anchor="ls")
-        base += pas_chute
-
-    # halo doux autour des lettres — jamais de bandeau ni de voile sur la photo.
-    # Sa densité s'adapte : plus le fond derrière le texte est clair, plus il est marqué.
+    # halo doux autour des lettres, plus un léger voile global — accepté
+    # uniquement pour ce style, exception à la règle « aucun voile sombre ».
     forme = Image.new("L", (R.LARGEUR, R.HAUTEUR), 0)
     forme.paste(masque_blanc, (0, 0), masque_blanc)
     forme.paste(masque_fort, (0, 0), masque_fort)
 
-    boite = forme.getbbox()
-    if boite:
-        zone = im.convert("L").crop(boite)
-        clarte = sum(zone.getdata()) / max(1, len(zone.getdata()))
-    else:
-        clarte = 128
-    # fond sombre (40) -> halo léger ; fond très clair (200) -> halo dense
-    densite = min(0.92, max(0.55, 0.50 + clarte / 320))
-
     serre = forme.filter(ImageFilter.GaussianBlur(5)).point(lambda v: min(255, int(v * 3.4)))
-    large = forme.filter(ImageFilter.GaussianBlur(20)).point(lambda v: min(255, int(v * 2.3)))
+    large = forme.filter(ImageFilter.GaussianBlur(20)).point(lambda v: min(255, int(v * 2.2)))
     halo = Image.new("L", (R.LARGEUR, R.HAUTEUR), 0)
     halo.paste(large, (0, 0))
     halo.paste(serre, (0, 0), serre)
 
     sortie_im = im.convert("RGBA")
     noir = Image.new("RGBA", (R.LARGEUR, R.HAUTEUR), (0, 0, 0, 255))
-    sortie_im = Image.composite(noir, sortie_im, halo.point(lambda v: int(v * densite)))
-    sortie_im.paste((255, 255, 255, 255), (0, 0), masque_blanc)
-    sortie_im.paste(_degrade().convert("RGBA"), (0, 0), masque_fort)
+    voile = Image.new("L", (R.LARGEUR, R.HAUTEUR), int(255 * R.COUVERTURE_ASSOMBRISSEMENT))
+    sortie_im = Image.composite(noir, sortie_im, voile)
+    sortie_im = Image.composite(noir, sortie_im, halo.point(lambda v: min(255, int(v * 0.65))))
+
+    sortie_im.paste(R.COUVERTURE_IVOIRE + (255,), (0, 0), masque_blanc)
+    sortie_im.paste(_degrade_sur_le_mot(masque_fort).convert("RGBA"), (0, 0), masque_fort)
+
+    signature = _signature(R.LARGEUR)
+    sortie_im.alpha_composite(signature, (0, int(y_signature)))
 
     sortie_im.convert("RGB").save(sortie, quality=92, optimize=True, subsampling=0)
 
     # le texte réellement posé, pour le contrôle automatique
+    boite = forme.getbbox()
+    bas_reel = int(y_signature + signature.height)
     _DERNIER_TEXTE.clear()
-    _DERNIER_TEXTE.update({"boite": boite, "clarte": round(clarte, 1), "densite": round(densite, 2)})
+    _DERNIER_TEXTE.update({"boite": boite, "bas_reel": bas_reel})
     return sortie
 
 
@@ -301,15 +334,16 @@ def controler(chemin: str) -> dict:
         "format_ok": abs(ratio - R.RATIO_ATTENDU) <= R.RATIO_TOLERANCE,
     }
 
+    bas_reel = _DERNIER_TEXTE.get("bas_reel")
     if boite:
         gauche, _, droite, bas = boite
         etat.update({
             "marge_gauche": gauche,
             "marge_droite": l - droite,
-            "bas_du_texte": bas,
-            "marge_gauche_ok": gauche >= R.MARGE_GAUCHE - 2,
-            "marge_droite_ok": (l - droite) >= 60,      # 34 px rognés par la grille + sécurité
-            "bas_ok": bas <= R.BAS_DU_TEXTE + 2,
+            "bas_du_texte": bas_reel if bas_reel is not None else bas,
+            "marge_gauche_ok": gauche >= R.COUVERTURE_MARGE_SECURITE - 2,
+            "marge_droite_ok": (l - droite) >= R.COUVERTURE_MARGE_SECURITE - 2,
+            "bas_ok": (bas_reel if bas_reel is not None else bas) <= R.COUVERTURE_BAS_MAX,
         })
 
     etat["valide"] = all(v for k, v in etat.items() if k.endswith("_ok"))
