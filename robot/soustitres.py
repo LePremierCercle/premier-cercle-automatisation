@@ -160,6 +160,17 @@ def incruster(video, groupes, sortie, y=None, taille=None):
     return sortie
 
 
+def _assembler(mots):
+    """Recompose les mots d'un groupe, sans espace après une élision."""
+    texte = ""
+    for m in mots:
+        mot = m["mot"].strip()
+        if texte and not texte.endswith(("'", "’", "-")):
+            texte += " "
+        texte += mot
+    return texte
+
+
 def decouper_en_groupes(mots_minutes, par_groupe=3, duree_max=1.2):
     """
     Regroupe des mots minutés (issus de Whisper) par deux ou trois,
@@ -171,11 +182,16 @@ def decouper_en_groupes(mots_minutes, par_groupe=3, duree_max=1.2):
         assez = len(courant) >= par_groupe
         trop_long = courant[-1]["fin"] - courant[0]["debut"] >= duree_max
         ponctue = courant[-1]["mot"].rstrip().endswith((".", "!", "?", ","))
+        # On ne coupe jamais après une élision ni un trait d'union : « l' »,
+        # « d' », « qu' », « est-ce » doivent rester avec le mot qui suit.
+        colle = courant[-1]["mot"].rstrip().endswith(("'", "’", "-"))
+        if colle:
+            continue
         if assez or trop_long or ponctue:
             groupes.append((courant[0]["debut"], courant[-1]["fin"],
-                            " ".join(m["mot"].strip() for m in courant)))
+                            _assembler(courant)))
             courant = []
     if courant:
         groupes.append((courant[0]["debut"], courant[-1]["fin"],
-                        " ".join(m["mot"].strip() for m in courant)))
+                        _assembler(courant)))
     return groupes
