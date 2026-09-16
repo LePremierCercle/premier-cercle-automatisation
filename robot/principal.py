@@ -148,6 +148,32 @@ def etape_mettre_de_cote(element, fichier, dossier):
         return None
 
 
+def etape_story(element, fichier, dossier):
+    """
+    Fabrique la story à partir de la vidéo finale, sous-titres compris.
+    Ne fait jamais échouer le reste du traitement.
+    """
+    from . import story as ST
+
+    try:
+        infos = V.sonder(fichier)
+        if ST.trop_longue(infos["duree"]):
+            dire("  %d s : trop long pour une story, aucune story"
+                 % round(infos["duree"]))
+            return None
+
+        sortie = os.path.join(dossier, "story.mp4")
+        ST.fabriquer(fichier, element["base"], sortie)
+        dire("  story : « %s »" % ST.choisir_appel(element["base"]))
+        P.deposer_video(element["nom"], sortie, "STORIES")
+        return sortie
+
+    except Exception as e:
+        dire("  story impossible : %s" % e)
+        traceback.print_exc()
+        return None
+
+
 def etape_soustitres(element, fichier, dossier, mots):
     """Incruste les sous-titres et renvoie la vidéo à sa place."""
     if not mots:
@@ -179,8 +205,9 @@ def traiter(element):
         deja_transcrit = element["deja"]["transcription"]
         besoin_soustitres = R.SOUSTITRES_ACTIFS and not deja_transcrit
         besoin_miniature = not element["deja"]["miniature"]
+        besoin_story = not element["deja"]["story"]
 
-        if not besoin_soustitres and not besoin_miniature:
+        if not besoin_soustitres and not besoin_miniature and not besoin_story:
             dire("  rien à faire sur cette vidéo")
             return
 
@@ -226,9 +253,16 @@ def traiter(element):
                 dire("  couverture en attente du texte de la tâche Claude")
                 etape_mettre_de_cote(element, propre, dossier)
 
+        # La vidéo finale : celle qu'on vient de sous-titrer, ou, si les
+        # sous-titres étaient déjà faits, celle qui était dans le Drive.
+        # C'est elle qui sert de base à la story.
+        finale = propre
+
         if besoin_soustitres:
             try:
-                etape_soustitres(element, propre, dossier, resultat["mots"])
+                sous_titree = etape_soustitres(element, propre, dossier, resultat["mots"])
+                if sous_titree:
+                    finale = sous_titree
             except Exception as e:
                 # On n'insiste pas : sans cela le robot reprendrait la même
                 # vidéo à chaque réveil. On prévient, et on considère le
@@ -239,6 +273,9 @@ def traiter(element):
                            "La vidéo est restée sans sous-titres incrustés.\n\n"
                            "%s\n\n%s" % (e, traceback.format_exc()[:1200]))
             ranger_la_transcription(element, resultat)
+
+        if besoin_story:
+            etape_story(element, finale, dossier)
 
     except Exception as e:
         dire("  ÉCHEC : %s" % e)
