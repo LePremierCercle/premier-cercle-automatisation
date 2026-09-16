@@ -5,11 +5,6 @@ Dialogue avec la passerelle Apps Script.
 Le robot ne touche jamais à Google Drive directement : c'est Apps Script,
 qui tourne chez Google avec les autorisations de Bilel, qui lui ouvre
 des accès temporaires et range les résultats.
-
-Trois échanges seulement :
-  travail()      -> ce qu'il y a à faire, avec des liens de téléchargement
-  deposer()      -> renvoie un petit fichier (texte, miniature)
-  deposer_gros() -> renvoie une vidéo, en l'envoyant directement à Google
 """
 
 import json
@@ -33,12 +28,28 @@ def _appel(action, charge=None, fichiers=None):
     corps = {"action": action, "jeton": JETON}
     if charge:
         corps.update(charge)
-    r = requests.post(PASSERELLE, json=corps, timeout=DELAI)
-    r.raise_for_status()
-    reponse = r.json()
-    if not reponse.get("ok", False):
-        raise RuntimeError("La passerelle a répondu : " + str(reponse.get("erreur")))
-    return reponse
+
+    # Google redirige parfois la réponse et le robot reçoit une page au lieu
+    # du message attendu. On réessaie plutôt que d'abandonner le travail déjà
+    # fait, et on dit clairement ce qui a été reçu si ça ne passe toujours pas.
+    debut_recu = ""
+    for essai in range(3):
+        r = requests.post(PASSERELLE, json=corps, timeout=DELAI)
+        r.raise_for_status()
+        try:
+            reponse = r.json()
+        except ValueError:
+            debut_recu = r.text[:400].replace("\n", " ")
+            time.sleep(3 * (essai + 1))
+            continue
+        if not reponse.get("ok", False):
+            raise RuntimeError("La passerelle a répondu : " + str(reponse.get("erreur")))
+        return reponse
+
+    raise RuntimeError(
+        "La passerelle n'a pas répondu correctement pour l'action « %s ». "
+        "Début de ce qu'elle a envoyé : %s" % (action, debut_recu)
+    )
 
 
 def travail():
