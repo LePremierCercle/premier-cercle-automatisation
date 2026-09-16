@@ -76,8 +76,17 @@ def transcrire(video, modele=None):
     for segment in segments:
         morceaux.append(segment.text.strip())
         for mot in (segment.words or []):
-            propre = _corriger(mot.word.strip())
-            if propre:
+            brut = mot.word
+            propre = _corriger(brut.strip())
+            if not propre:
+                continue
+            # Whisper rend parfois un mot en deux morceaux. Le morceau qui ne
+            # commence pas par une espace est la suite du précédent : on les
+            # recolle, sinon le sous-titre afficherait un mot coupé en deux.
+            if mots and not brut.startswith(" "):
+                mots[-1]["mot"] += propre
+                mots[-1]["fin"] = mot.end
+            else:
                 mots.append({"mot": propre, "debut": mot.start, "fin": mot.end})
 
     texte = _corriger(" ".join(morceaux).strip())
