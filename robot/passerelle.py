@@ -30,10 +30,10 @@ def _appel(action, charge=None, fichiers=None):
         corps.update(charge)
 
     # Google égare parfois la réponse d'Apps Script : l'adresse de retour
-    # renvoie un 404, ou une page au lieu du message attendu. Le travail, lui,
-    # a bien été fait. On réessaie donc plutôt que d'abandonner : toutes nos
-    # actions supportent d'être refaites (un dépôt remplace l'homonyme, une
-    # session d'envoi inutilisée expire toute seule).
+    # renvoie un 404, une page, ou la passerelle nous dit franchement qu'elle
+    # s'est perdue. Le travail, lui, a bien été fait. On réessaie donc plutôt
+    # que d'abandonner : toutes nos actions supportent d'être refaites (un
+    # dépôt remplace l'homonyme, une session d'envoi inutilisée expire seule).
     probleme = ""
     for essai in range(4):
         try:
@@ -48,9 +48,12 @@ def _appel(action, charge=None, fichiers=None):
         except requests.RequestException as err:
             probleme = str(err)[:200]
         else:
-            if not reponse.get("ok", False):
+            if reponse.get("erreur") == "reponse_perdue":
+                probleme = "réponse égarée par Google"
+            elif not reponse.get("ok", False):
                 raise RuntimeError("La passerelle a répondu : " + str(reponse.get("erreur")))
-            return reponse
+            else:
+                return reponse
 
         time.sleep(3 * (essai + 1))
 
@@ -65,7 +68,13 @@ def travail():
     Renvoie la liste de ce qui attend.
     Chaque entrée : {id, nom, type, lien, taille, deja: {...}}
     """
-    return _appel("travail").get("elements", [])
+    reponse = _appel("travail")
+    if "elements" not in reponse:
+        # Mieux vaut un échec bruyant qu'un « rien à faire » mensonger :
+        # une liste vide par erreur, et le robot dort pendant que le travail
+        # s'accumule.
+        raise RuntimeError("La passerelle n'a pas renvoyé la liste du travail.")
+    return reponse["elements"]
 
 
 def telecharger(lien, destination):
