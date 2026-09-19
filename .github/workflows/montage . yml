@@ -1,0 +1,61 @@
+name: Montage motion design
+
+on:
+  # la passerelle « Motion design » réveille le robot dès qu'une vidéo arrive
+  repository_dispatch:
+    types: [montage-video]
+  # filet de sécurité : un passage toutes les 2 heures
+  schedule:
+    - cron: '20 */2 * * *'
+  # bouton pour lancer à la main
+  workflow_dispatch:
+
+concurrency:
+  group: montage
+  cancel-in-progress: false
+
+jobs:
+  monter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        rang: [0, 1, 2, 3]
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Installer ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+
+      - name: Installer les bibliothèques
+        run: pip install -q -r requirements.txt
+
+      - name: Mettre en cache la police Inter et le modèle de transcription
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.fonts
+            ~/.cache/huggingface
+          key: ressources-v1
+
+      - name: Installer les polices
+        run: python -m robot.polices
+
+      - name: Faire le travail
+        env:
+          MONTAGE_URL: ${{ secrets.MONTAGE_URL }}
+          PASSERELLE_JETON: ${{ secrets.PASSERELLE_JETON }}
+          ROBOT_RANG: ${{ matrix.rang }}
+          ROBOT_NOMBRE: 4
+        run: python -m robot.formation
